@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="app-repo" content="golden-hour">
-<meta name="app-version" content="0.0.5">
+<meta name="app-version" content="0.0.6">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -237,7 +237,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;touch-actio
   <p><b>Trees</b> knock discs down. The <b>lake</b> costs a penalty throw and you play on from where the disc went in. Furthest from the basket throws next. Tap during a flight to speed it up.</p>
   <button class="sec" id="helpX">GOT IT</button>
 </div></div>
-<div id="ver">v0.0.5</div>
+<div id="ver">v0.0.6</div>
 <script>
 /* ================= GOLDEN HOUR — the lake course: terrain, holes, trees ================= */
 /* World units are metres. x = east, z = south, y = up. Water surface is y = 0. */
@@ -763,7 +763,7 @@ const PHYS = (() => {
 
 
 /* ================= GOLDEN HOUR — core: utils, maths, WebGL plumbing ================= */
-const VERSION = '0.0.5';
+const VERSION = '0.0.6';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -778,10 +778,19 @@ const fmtFt = m => Math.round(m * FT).toLocaleString('en-GB');
 function fatal(e) {
   if ($('err')) return;
   const d = document.createElement('div'); d.id = 'err';
-  d.textContent = 'GOLDEN HOUR v' + VERSION + ' hit a problem:\n\n' + (e && (e.stack || e.message) || e);
+  d.textContent = 'GOLDEN HOUR v' + VERSION + ' hit a problem:\n\n' + (e && (e.stack || e.message) || e) + '\n\n(tap to close)';
+  d.onclick = () => d.remove();
   document.body.appendChild(d);
 }
-window.addEventListener('error', ev => fatal(ev.error || ev.message));
+/* only report the game's own errors. A bare "Script error." comes from another site's script that the browser
+   won't let us read (the iPhone share sheet reading the page, the visitor counter), so it is nothing to do with the game. */
+const PAGE = location.href.split('#')[0].split('?')[0];
+window.addEventListener('error', ev => {
+  const msg = String(ev.message || '');
+  if (!ev.error && /^script error\.?$/i.test(msg.trim())) return;
+  if (ev.filename && ev.filename.split('#')[0].split('?')[0] !== PAGE) return;
+  fatal(ev.error || msg);
+});
 
 /* ---------- vectors ---------- */
 const V = {
@@ -837,6 +846,9 @@ const M4 = {
 const cv = $('gl');
 const gl = cv.getContext('webgl2', { antialias: false, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
 if (!gl) { fatal('This device does not support WebGL2, which Golden Hour needs.'); throw new Error('no webgl2'); }
+/* if the phone takes the graphics away (low memory, long time in the background), pause, and reload when it comes back */
+cv.addEventListener('webglcontextlost', e => { e.preventDefault(); RT.lost = true; }, false);
+cv.addEventListener('webglcontextrestored', () => location.reload(), false);
 const HDR = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
 gl.getExtension('OES_texture_float_linear');
 
@@ -3582,7 +3594,7 @@ function tick(dt, draw) {
     CAM.shake = Math.max(0, CAM.shake - dt * 2);
     FX.update(dt);
     frameScene(dt);
-    if (draw) render(G.t, dt);
+    if (draw && !RT.lost) render(G.t, dt);
     // FX.glow markers live one frame
     for (let i = FX.glow.length - 1; i >= 0; i--) if (FX.glow[i].life <= .02) FX.glow.splice(i, 1);
     autoQuality(dt);
